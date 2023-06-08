@@ -1,7 +1,9 @@
 from utils.p_matrix import contact_lists_from_p_l_t
 from utils.spectral_clustering import spec_clustering
-from  scipy.stats import lognorm
+from scipy.stats import lognorm
 from numpy.random import default_rng
+from functools import partial  
+
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -168,9 +170,7 @@ class SIS_model(object):
         transition_times = create_transition_times_dict(self.world.agents)
         self.write_cluster_times_to_ai_df(transition_times)
         del transition_times
-        self.write_infection_times_per_indiviual()
-        
-   
+        self.write_infection_times_per_indiviual()        
     
     def infection_attempt(self, pair: tuple,t:int,size_dependent_inf_prob=True):
         a1, a2 = self.world.agents[pair[0]], self.world.agents[pair[1]] 
@@ -285,8 +285,6 @@ def run_single_simulation_for_inf_times(w,_, t=600):
         log.info('run test for mean infection times')
         del model_t
         return(times)
-from functools import partial  
-
 
 def get_average_infection_times_mp(n_agents=12, n_samples=12, t= 600, k_I=0.2, n_cores=4):
     ## multi processing # seems to not converge 
