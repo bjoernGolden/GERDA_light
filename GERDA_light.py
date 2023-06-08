@@ -1,4 +1,3 @@
-
 from utils.p_matrix import contact_lists_from_p_l_t
 from utils.spectral_clustering import spec_clustering
 from  scipy.stats import lognorm
@@ -60,19 +59,20 @@ class World(object):
             self.agent_contacts = contact_lists_from_p_l_t(self.p_l_t, directed=False)
             self.contacts = agent_contacts_to_cluster_contacts(self.agent_contacts,self.hID_cID_dict)
             self.generate_agents(column = 'cluster')
-            self.max_cluster_size = self.ai_df['cluster_size'].max()
+
         
         else:
             self.p_l_t = jb.load(p_l_t_filepath)
-            self.ai_df = jb.load(ai_df_filename)    
+            self.ai_df = jb.load(ai_df_filename)[['home','h_ID','type','age']]
             log.debug('world with agents without clustering')
             self.SC = None 
             self.hID_cID_dict = {x: x for x in self.ai_df['h_ID'].to_list()} # each is their own cluster 
             self.ai_df['cluster'] = self.ai_df['h_ID']
-            self.max_cluster_size = 1 
             self.contacts = contact_lists_from_p_l_t(self.p_l_t, directed=False)
             self.generate_agents(column = 'h_ID')
 
+        self.add_sizes_to_ai_df()
+        self.max_cluster_size = self.ai_df['cluster_size'].max()
         self.n_agents = self.p_l_t.shape[0]-1 ## 0 is not an agent
         self.schedule_time_span = self.p_l_t.shape[1]
         log.info(f'max cluster size: {self.max_cluster_size}')
@@ -90,6 +90,11 @@ class World(object):
         for hID in agents_to_infect:
             self.agents[hID].state=1 # infect one agent
             self.agents[hID].times['infection']=0 
+
+    ### dataframe manipulations
+    def add_sizes_to_ai_df(self):
+        self.ai_df['household_size'] = self.ai_df['home'].map(self.ai_df.groupby('home').count()['h_ID'])
+        self.ai_df['cluster_size'] = self.ai_df['cluster'].map(self.ai_df.groupby('cluster').count()['h_ID'])            
 
 
 def determine_contact_pairs(cluster_contacts,t=1,seed=None, weekly_contacts=True)->list:
@@ -117,18 +122,22 @@ def get_hID_cID_dict(SC)->dict:
     SC.ai_df.set_index('h_ID')
     return SC.ai_df['cluster'].to_dict()
 
-
-
 class SIS_model(object):
-    def __init__(self,world,t=1, size_dependent_inf_prob=True):
+    def __init__(self,world,t=1, determine_inf_times_for_cluster=True):
         self.world = copy.deepcopy(world)
         #self.world = world ##
         self.real_contacts = {}
         self.schedule_time_span = 168
         self.t = t
-        if size_dependent_inf_prob:
+        if determine_inf_times_for_cluster:
+            
             self.mean_inf_time = get_average_infection_times_mp(
-                n_agents=int(self.world.max_cluster_size), n_samples=15, t=600, k_I=self.world.global_inf , n_cores=4) ## t has to be dependent on the n_agents
+                n_agents=int(self.world.max_cluster_size), n_samples=15, 
+                t=600, k_I=self.world.global_inf , n_cores=4) ## t has to be dependent on the n_agents
+            
+            self.world.infect_prob_dist_per_size = get_infection_prob_dist_dict(
+                s=1,a=4,
+                infection_times_cluster_list=self.mean_inf_time)
         else:
             self.mean_inf_time = [0]    
     
@@ -155,7 +164,13 @@ class SIS_model(object):
             for pair in contact_pairs:
                 self.infection_attempt(pair,t,size_dependent_inf_prob=size_dependent_inf_prob)
         
-        #write_times_to_ai_df()        
+        ## write transtion times per cluster to ai df  when run is finished
+        transition_times = create_transition_times_dict(self.world.agents)
+        self.write_cluster_times_to_ai_df(transition_times)
+        del transition_times
+        self.write_infection_times_per_indiviual()
+        
+   
     
     def infection_attempt(self, pair: tuple,t:int,size_dependent_inf_prob=True):
         a1, a2 = self.world.agents[pair[0]], self.world.agents[pair[1]] 
@@ -174,7 +189,6 @@ class SIS_model(object):
                     log.debug(f'p_I: {p_I}')
                     agents[0].state = 1  ## infected without preliminary, however p_I is 0 anyways for 1-2 days
                     agents[0].times['infection'] = t
-                    #self.world.ai_df[self.world.ai_df['h_ID']==agents[0].ID]['infection_time'] = t ## to df 
     
     def determine_contact_pairs(self,contact_list: list,seed=None)->list:
         rng = default_rng(seed=seed)
@@ -185,9 +199,14 @@ class SIS_model(object):
     def t_to_schedule_t(self, t:int)->int:
         return t%self.schedule_time_span
     
-    def write_times_to_ai_df(self):
-        ai_df = self.world.ai_df
+    def write_infection_times_per_indiviual(self):
+        self.world.ai_df = self.world.ai_df.groupby('cluster').apply(assign_inf_timing, inf_timings=self.mean_inf_time).reset_index(drop=True)
+        self.world.ai_df['infection_time'] = self.world.ai_df['cluster_infection_time']+self.world.ai_df['Infection_timing_in_cluster']   
 
+    def write_cluster_times_to_ai_df(self, times_dict):
+        'add colums for transition times per cluster to ai_df'
+        for transition in times_dict:
+            self.world.ai_df['cluster_'+transition+'_time'] = self.world.ai_df['cluster'].map(times_dict[transition])    
     
 
 ### utility function
@@ -247,7 +266,6 @@ def create_homogenous_world(n_agents=10, k_I=0.2):
     return h_w 
 
 
-
 def average_lists(t_lists: list)->list: 
     ## required since the lists have not the same length
     max_len = max([len(lst) for lst in t_lists])
@@ -258,23 +276,9 @@ def average_lists(t_lists: list)->list:
     mean_inf_times = np.nanmean(t_array, axis=0).astype(int)
     return mean_inf_times
 
-# def get_average_infection_times(agents=12, n=50, t= 600, k_I=0.2):
-#     t_lists=[]
-#     w = create_homogenous_world(n_agents=agents, k_I=0.2)
-#     for _ in range(n): ### average over n simulations 
-#         w_t = copy.deepcopy(w)
-#         model_t = SIS_model(w_t)
-#         model_t.run(timespan=t,only_inf_rel_contacts=True)
-#         times = [int(a.times['infection']/24) for a in model_t.world.agents.values() if a.times['infection'] is not None]
-#         times.sort()
-#         t_lists.append(times)
-#         del w_t
-
-#     mean_inf_times = average_lists(t_lists)
-#     return mean_inf_times
 
 def run_single_simulation_for_inf_times(w,_, t=600):
-        model_t = SIS_model(w, size_dependent_inf_prob=False)
+        model_t = SIS_model(w, determine_inf_times_for_cluster=False)
         model_t.run(timespan=t,only_inf_rel_contacts=True)
         times = [int(a.times['infection']/24) for a in model_t.world.agents.values() if a.times['infection'] is not None]
         times.sort()
@@ -282,6 +286,7 @@ def run_single_simulation_for_inf_times(w,_, t=600):
         del model_t
         return(times)
 from functools import partial  
+
 
 def get_average_infection_times_mp(n_agents=12, n_samples=12, t= 600, k_I=0.2, n_cores=4):
     ## multi processing # seems to not converge 
@@ -297,6 +302,20 @@ def get_average_infection_times_mp(n_agents=12, n_samples=12, t= 600, k_I=0.2, n
     #     l.append(f(0))
     return  average_lists(l)
 
+def create_transition_times_dict(agents: dict) -> dict:
+    times_dict = {}
+    for transition in next(iter(agents.values())).times.keys():
+        times_dict[transition] = {agent_id : agents[agent_id].times[transition] for agent_id in agents}
+    return times_dict  
+
+def write_cluster_times_to_ai_df(ai_df, times_dict):
+    'add colums for transition times per cluster to ai_df'
+    for transition in times_dict:
+       ai_df['cluster_'+transition+'_time'] = ai_df['cluster'].map(times_dict[transition])
+
+def assign_inf_timing(cluster, inf_timings, time_step_size=24):
+    cluster['Infection_timing_in_cluster'] = np.array(inf_timings[:len(cluster)])*time_step_size 
+    return cluster  
 
 if __name__=="__main__":
 
