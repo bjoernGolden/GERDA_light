@@ -38,9 +38,10 @@ class World(object):
                        ai_df_filename = 'src/Gangelt_03_new_ai_df.gz',
                        clustering = True,
                        k_I: float = 0.2 ,
-                       infection_times_cluster_list=[0,1,2,2,3,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,7,7,7,7,8],
+                       infection_times_cluster_list=[0,1,2,2,3,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,7,7,7,7,8], ## list[0] must be 0
                        **cluster_kwargs :dict):
 
+        self.infection_times_cluster_list = infection_times_cluster_list
         self.infect_prob_dist = create_lognorm_probability_dist(s=1,a=4, days=30) ## in days
         self.infect_prob_dist_per_size = get_infection_prob_dist_dict(s=1,a=4,
                                                                       infection_times_cluster_list=infection_times_cluster_list)
@@ -60,6 +61,7 @@ class World(object):
             self.hID_cID_dict = get_hID_cID_dict(self.SC)
             self.agent_contacts = contact_lists_from_p_l_t(self.p_l_t, directed=False)
             self.contacts = agent_contacts_to_cluster_contacts(self.agent_contacts,self.hID_cID_dict)
+            self.add_sizes_to_ai_df()
             self.generate_agents(column = 'cluster')
 
         
@@ -71,9 +73,10 @@ class World(object):
             self.hID_cID_dict = {x: x for x in self.ai_df['h_ID'].to_list()} # each is their own cluster 
             self.ai_df['cluster'] = self.ai_df['h_ID']
             self.contacts = contact_lists_from_p_l_t(self.p_l_t, directed=False)
+            self.add_sizes_to_ai_df()
             self.generate_agents(column = 'h_ID')
 
-        self.add_sizes_to_ai_df()
+       
         self.max_cluster_size = self.ai_df['cluster_size'].max()
         self.n_agents = self.p_l_t.shape[0]-1 ## 0 is not an agent
         self.schedule_time_span = self.p_l_t.shape[1]
@@ -95,8 +98,8 @@ class World(object):
 
     ### dataframe manipulations
     def add_sizes_to_ai_df(self):
-        self.ai_df['household_size'] = self.ai_df['home'].map(self.ai_df.groupby('home').count()['h_ID'])
-        self.ai_df['cluster_size'] = self.ai_df['cluster'].map(self.ai_df.groupby('cluster').count()['h_ID'])            
+        self.ai_df['household_size'] = self.ai_df['home'].map(self.ai_df.groupby('home',group_keys=False).count()['h_ID'])
+        self.ai_df['cluster_size'] = self.ai_df['cluster'].map(self.ai_df.groupby('cluster',group_keys=False).count()['h_ID'])            
 
 
 def determine_contact_pairs(cluster_contacts,t=1,seed=None, weekly_contacts=True)->list:
@@ -127,11 +130,13 @@ def get_hID_cID_dict(SC)->dict:
 class SIS_model(object):
     def __init__(self,world,t=1, determine_inf_times_for_cluster=True):
         self.world = copy.deepcopy(world)
-        #self.world = world ##
+        self.w0 = world 
         self.real_contacts = {}
         self.schedule_time_span = 168
         self.t = t
-        if determine_inf_times_for_cluster:
+        ## if true  a homongeous model with n_agents = max cluster size is repeatedly run
+        ## the average infection times are then used
+        if determine_inf_times_for_cluster: 
             
             self.mean_inf_time = get_average_infection_times_mp(
                 n_agents=int(self.world.max_cluster_size), n_samples=15, 
@@ -141,7 +146,7 @@ class SIS_model(object):
                 s=1,a=4,
                 infection_times_cluster_list=self.mean_inf_time)
         else:
-            self.mean_inf_time = [0]    
+            self.mean_inf_time = [0]# self.world.infection_times_cluster_list     
     
     def reset(self):
         self.__init__(self.w0,t=1)
@@ -152,7 +157,7 @@ class SIS_model(object):
         
         if size_dependent_inf_prob:
             log.debug(f'using cluster size dependent  infection probability:')
-        for t in range(self.t, self.t +timespan+1):
+        for t in range(self.t, self.t + timespan +1):
             self.t
             st = self.t_to_schedule_t(t) # st schedule time or time of the week
             ## filter for infection relevant contacts only
@@ -174,7 +179,7 @@ class SIS_model(object):
     
     def infection_attempt(self, pair: tuple,t:int,size_dependent_inf_prob=True):
         a1, a2 = self.world.agents[pair[0]], self.world.agents[pair[1]] 
-        states = (a1.state ,a2.state)
+        states = (a1.state, a2.state)
         
         if set(states)== {0,1}:
             agents = [[a1,a2][x] for x in states] ## sorting that agent[0] has state 0 and vice versa 
@@ -200,7 +205,7 @@ class SIS_model(object):
         return t%self.schedule_time_span
     
     def write_infection_times_per_indiviual(self):
-        self.world.ai_df = self.world.ai_df.groupby('cluster').apply(assign_inf_timing, inf_timings=self.mean_inf_time).reset_index(drop=True)
+        self.world.ai_df = self.world.ai_df.groupby('cluster',group_keys=False).apply(assign_inf_timing, inf_timings=self.mean_inf_time).reset_index(drop=True)
         self.world.ai_df['infection_time'] = self.world.ai_df['cluster_infection_time']+self.world.ai_df['Infection_timing_in_cluster']   
 
     def write_cluster_times_to_ai_df(self, times_dict):
@@ -321,7 +326,7 @@ if __name__=="__main__":
     w1 = World(clustering=False)
     model = SIS_model(w1)
     model.world.agents[1].state=1 # infect one agent
-    model.world.agents[1].times['infection']=0 
+    model.world.agents[1].times['infection'] = 0 
     model.run(timespan=1500, only_inf_rel_contacts=True)
 
     ## Data collection
