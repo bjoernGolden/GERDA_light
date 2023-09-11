@@ -184,7 +184,7 @@ class SIS_model(object):
                 contacts_pairs_at_t = self.world.contacts[st]
 
             if only_infection: ### combined probability for contact and infection
-                for triple in contacts_pairs_at_t: # (i,j,p_c)- pc can be a tuple 
+                for triple in contacts_pairs_at_t: # (i,j,p_c)- pc can be a tuple ### could be parallel
                     self.infection_attempt_c(triple,size_dependent_inf_prob=size_dependent_inf_prob)
 
             else: ### separated probability for contact and infection
