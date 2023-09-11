@@ -7,7 +7,7 @@ import pandas as pd
 from itertools import permutations
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from utils.p_matrix import P_ijT, test_for_singularity_of_P
+from G_utils.p_matrix import P_ijT, test_for_singularity_of_P
 import logging as log 
 
 
@@ -77,7 +77,7 @@ class spec_clustering(object):
 
         ## cluster assignment
         self.clus_dict = self.get_clus_dict(indiviual_cluster=indvid_clust_for_exclud_agent)
-        self.cluster_to_ai_df()  
+        self.ai_df['cluster']=self.ai_df['h_ID'].map(self.clus_dict)
         
         ##  silhoutte_score - measure for the cluster assignment
         self.silhouette_score = silhouette_score(self.P_red, self.cluster)
@@ -146,10 +146,10 @@ class spec_clustering(object):
         _, c = np.unique(clusters_arr, return_counts=True)
         return c    
 
-    def cluster_to_ai_df(self):
-        self.ai_df['cluster']=self.ai_df['h_ID'].map(self.clus_dict)
-        self.ai_df['household_size'] = self.ai_df['home'].map(self.ai_df.groupby('home').count()['h_ID'])
-        self.ai_df['cluster_size'] = self.ai_df['cluster'].map(self.ai_df.groupby('cluster').count()['h_ID'])    
+    #def cluster_to_ai_df(self):
+    #    self.ai_df['cluster']=self.ai_df['h_ID'].map(self.clus_dict)
+        #self.ai_df['household_size'] = self.ai_df['home'].map(self.ai_df.groupby('home').count()['h_ID'])
+        #self.ai_df['cluster_size'] = self.ai_df['cluster'].map(self.ai_df.groupby('cluster').count()['h_ID'])    
 
       
 
