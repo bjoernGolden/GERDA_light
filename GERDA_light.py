@@ -1,5 +1,6 @@
-from utils.p_matrix import contact_lists_from_p_l_t
-from utils.spectral_clustering import spec_clustering
+from G_utils.p_matrix import contact_lists_from_p_l_t
+from G_utils.spectral_clustering import spec_clustering
+from G_utils.temporal_condensation import generate_condensed_inf_p_dict, approximate_PI
 from scipy.stats import lognorm
 from numpy.random import default_rng
 from functools import partial  
@@ -36,18 +37,21 @@ class Agent(object):
 class World(object):
     def __init__(self, p_l_t_filepath = 'src/Gangelt_03_new_p_l_t.gz',
                        ai_df_filename = 'src/Gangelt_03_new_ai_df.gz',
+                       dT = 1, ### need to be an integer and a divisor of 168 (schedule time span)
+                       only_P1 = False, ### only for testing 
                        clustering = True,
                        k_I: float = 0.2 ,
                        infection_times_cluster_list=[0,1,2,2,3,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,7,7,7,7,8], ## list[0] must be 0
                        **cluster_kwargs :dict):
-
         self.infection_times_cluster_list = infection_times_cluster_list
         self.infect_prob_dist = create_lognorm_probability_dist(s=1,a=4, days=30) ## in days
         self.infect_prob_dist_per_size = get_infection_prob_dist_dict(s=1,a=4,
                                                                       infection_times_cluster_list=infection_times_cluster_list)
         self.global_inf = k_I
         self.clustering = clustering
-        
+        self.dT = dT
+        self.only_P1 = only_P1 ### only for testing 
+
         if clustering:
             
             log.debug('world with clusters of agents')
@@ -78,10 +82,14 @@ class World(object):
 
        
         self.max_cluster_size = self.ai_df['cluster_size'].max()
-        self.n_agents = self.p_l_t.shape[0]-1 ## 0 is not an agent
-        self.schedule_time_span = self.p_l_t.shape[1]
         log.info(f'max cluster size: {self.max_cluster_size}')
 
+        self.n_agents = self.p_l_t.shape[0]-1 ## 0 is not an agent
+        self.schedule_time_span = self.p_l_t.shape[1]
+        
+        if (self.dT > 0)&(not self.only_P1):## del only if testing is ok 
+           assert self.schedule_time_span%self.dT==0 , ('dT musst be a devisor of the schedule time span (usually 168h)')
+           self.contacts = generate_condensed_inf_p_dict(self.contacts, self.schedule_time_span, self.dT)
 
          
     def generate_agents(self, column = 'h_ID')->dict:
@@ -93,13 +101,14 @@ class World(object):
     
     def initialize_infections(self, agents_to_infect=[1]):
         for hID in agents_to_infect:
-            self.agents[hID].state=1 # infect one agent
-            self.agents[hID].times['infection']=0 
+            self.agents[hID].state = 1 # infect one agent
+            self.agents[hID].times['infection'] = 0 
 
     ### dataframe manipulations
     def add_sizes_to_ai_df(self):
         self.ai_df['household_size'] = self.ai_df['home'].map(self.ai_df.groupby('home',group_keys=False).count()['h_ID'])
-        self.ai_df['cluster_size'] = self.ai_df['cluster'].map(self.ai_df.groupby('cluster',group_keys=False).count()['h_ID'])            
+        self.ai_df['cluster_size'] = self.ai_df['cluster'].map(self.ai_df.groupby('cluster',group_keys=False).count()['h_ID'])
+
 
 
 def determine_contact_pairs(cluster_contacts,t=1,seed=None, weekly_contacts=True)->list:
@@ -149,51 +158,97 @@ class SIS_model(object):
             self.mean_inf_time = [0]# self.world.infection_times_cluster_list     
     
     def reset(self):
-        self.__init__(self.w0,t=1)
+        self.world = copy.deepcopy(self.w0)
+        self.t = 1
+        # self.__init__(self.w0,t=1)
         
     def run(self,timespan=96, 
-            only_inf_rel_contacts=True,
-            size_dependent_inf_prob=True):
+            only_inf_rel_contacts: bool = True,
+            size_dependent_inf_prob: bool = True,
+            only_infection: bool = False):
         
         if size_dependent_inf_prob:
             log.debug(f'using cluster size dependent  infection probability:')
-        for t in range(self.t, self.t + timespan +1):
-            self.t
-            st = self.t_to_schedule_t(t) # st schedule time or time of the week
+        
+        t_start = self.t
+        for t in range(t_start+1,t_start + timespan+1):# +1
+            self.t = t ##update 
+            st = self.t_to_schedule_t(t, dT = self.world.dT) # st schedule time or time of the week
+            
             ## filter for infection relevant contacts only
             if only_inf_rel_contacts:
-                reduced_contacts = [x for x in self.world.contacts[st] if set((self.world.agents[x[0]].state,self.world.agents[x[1]].state))=={0,1}] ## falsch!!!
-                log.debug(f'{len(reduced_contacts)} infection relevant interactions out of {len(self.world.contacts[st])} total interactions')
-                contact_pairs = self.determine_contact_pairs(reduced_contacts)
+                contacts_pairs_at_t = [x for x in self.world.contacts[st] if set((self.world.agents[x[0]].state,self.world.agents[x[1]].state))=={0,1}] ## falsch!!!
+                log.debug(f'{len(contacts_pairs_at_t)} infection relevant interactions out of {len(self.world.contacts[st])} total interactions')
+                
             else:
-                contact_pairs = self.determine_contact_pairs(self.world.contacts[st])    
-            self.real_contacts[t] = contact_pairs
-            for pair in contact_pairs:
-                self.infection_attempt(pair,t,size_dependent_inf_prob=size_dependent_inf_prob)
+                contacts_pairs_at_t = self.world.contacts[st]
+
+            if only_infection: ### combined probability for contact and infection
+                for triple in contacts_pairs_at_t: # (i,j,p_c)- pc can be a tuple 
+                    self.infection_attempt_c(triple,size_dependent_inf_prob=size_dependent_inf_prob)
+
+            else: ### separated probability for contact and infection
+                contact_pairs = self.determine_contact_pairs(contacts_pairs_at_t)
+                self.real_contacts[t] = contact_pairs
+                for pair in contact_pairs:
+                    self.infection_attempt(pair,size_dependent_inf_prob=size_dependent_inf_prob)
         
-        ## write transtion times per cluster to ai df  when run is finished
+                   
+        
+        ## write transtion times per cluster to ai_df  when run is finished
         transition_times = create_transition_times_dict(self.world.agents)
         self.write_cluster_times_to_ai_df(transition_times)
         del transition_times
         self.write_infection_times_per_indiviual()        
     
-    def infection_attempt(self, pair: tuple,t:int,size_dependent_inf_prob=True):
+    def infection_attempt(self, pair: tuple, size_dependent_inf_prob=True):
         a1, a2 = self.world.agents[pair[0]], self.world.agents[pair[1]] 
         states = (a1.state, a2.state)
         
         if set(states)== {0,1}:
             agents = [[a1,a2][x] for x in states] ## sorting that agent[0] has state 0 and vice versa 
             ## infection probability
-            inf_duration_days = int((t-agents[1].times['infection'])/24)
+            inf_duration_days = int((self.t-agents[1].times['infection'])/24)
             if inf_duration_days < 21: ## replace 21 with length of distribution
+                
                 if size_dependent_inf_prob:
                     p_I = self.world.global_inf * self.world.infect_prob_dist_per_size[agents[1].size][inf_duration_days]
                 else:    
                     p_I = self.world.global_inf * self.world.infect_prob_dist[inf_duration_days]
+                
                 if p_I > np.random.random():
                     log.debug(f'p_I: {p_I}')
                     agents[0].state = 1  ## infected without preliminary, however p_I is 0 anyways for 1-2 days
-                    agents[0].times['infection'] = t
+                    agents[0].times['infection'] = self.t
+    
+    def infection_attempt_c(self, triple: tuple, size_dependent_inf_prob=True):
+        
+        a1, a2, p_c = self.world.agents[triple[0]], self.world.agents[triple[1]], triple[2] 
+
+        states = (a1.state, a2.state)
+        
+        if set(states)== {0,1}:
+            agents = [[a1,a2][x] for x in states] ## sorting that agent[0] has state 0 and vice versa 
+            ## infection probability
+            inf_duration_days = int((self.t-agents[1].times['infection'])*self.world.dT/24)
+            if inf_duration_days < 21: ## replace 21 with length of distribution
+                
+                p_I = self.get_pI(inf_duration_days, agents[1].size)
+                
+                if type(p_c) == tuple:
+                    P_I = approximate_PI(p_I, p_c)
+                else:
+                    P_I = p_I * p_c
+                
+                if P_I > np.random.random():
+                    #log.debug(f'P_I: {P_I}')
+                    agents[0].state = 1  ## infected without preliminary, however p_I is 0 anyways for 1-2 days
+                    agents[0].times['infection'] = self.t
+
+    def get_pI(self, infector_inf_duration_days, infector_agent_size):
+        p_I = (self.world.global_inf * 
+               self.world.infect_prob_dist_per_size[infector_agent_size][infector_inf_duration_days])
+        return p_I
     
     def determine_contact_pairs(self,contact_list: list,seed=None)->list:
         rng = default_rng(seed=seed)
@@ -201,8 +256,8 @@ class SIS_model(object):
         log.debug(f'{len(contact_pairs)} contact pairs out of {len(contact_list)}')
         return contact_pairs
     
-    def t_to_schedule_t(self, t:int)->int:
-        return t%self.schedule_time_span
+    def t_to_schedule_t(self, t:int, dT:int = 1)->int:
+        return t%(int(self.schedule_time_span/dT))
     
     def write_infection_times_per_indiviual(self):
         self.world.ai_df = self.world.ai_df.groupby('cluster',group_keys=False).apply(assign_inf_timing, inf_timings=self.mean_inf_time).reset_index(drop=True)
@@ -293,8 +348,8 @@ def run_single_simulation_for_inf_times(w,_, t=600):
 
 def get_average_infection_times_mp(n_agents=12, n_samples=12, t= 600, k_I=0.2, n_cores=4):
     ## multi processing # seems to not converge 
-    t_lists=[0]*int(n_agents)
-    print('iter: ',len(t_lists))
+    t_lists = [0] * int(n_agents)
+    log.debug('iter: ',len(t_lists))
     h_w = create_homogenous_world(n_agents=n_agents, k_I=k_I)
     
     f = partial(run_single_simulation_for_inf_times,h_w,t=t)
