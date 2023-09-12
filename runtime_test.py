@@ -129,7 +129,7 @@ if __name__ == '__main__':
     ax.set_title(f'{name}')
     ax.set_ylabel('infection events')
     ax.set_xlabel('time, days')
-    plt.show()
+    #plt.show()
 
     ##### store output ### 
     fig.savefig('plots/runtime_test.png', bbox_inches='tight')
