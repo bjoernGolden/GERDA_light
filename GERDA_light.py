@@ -137,7 +137,9 @@ def get_hID_cID_dict(SC)->dict:
     return SC.ai_df['cluster'].to_dict()
 
 class SIS_model(object):
-    def __init__(self,world,t=1, determine_inf_times_for_cluster=True):
+    def __init__(self,world,sim_id=1, t=1, determine_inf_times_for_cluster=False):
+        self.rng = default_rng(seed=sim_id)
+        self.ID = sim_id
         self.world = copy.deepcopy(world)
         self.w0 = world 
         self.real_contacts = {}
@@ -171,6 +173,7 @@ class SIS_model(object):
             log.debug(f'using cluster size dependent  infection probability:')
         
         t_start = self.t
+        
         for t in range(t_start+1,t_start + timespan+1):# +1
             self.t = t ##update 
             st = self.t_to_schedule_t(t, dT = self.world.dT) # st schedule time or time of the week
@@ -192,14 +195,15 @@ class SIS_model(object):
                 self.real_contacts[t] = contact_pairs
                 for pair in contact_pairs:
                     self.infection_attempt(pair,size_dependent_inf_prob=size_dependent_inf_prob)
-        
-                   
-        
+
+
         ## write transtion times per cluster to ai_df  when run is finished
         transition_times = create_transition_times_dict(self.world.agents)
         self.write_cluster_times_to_ai_df(transition_times)
         del transition_times
         self.write_infection_times_per_indiviual()        
+        
+    
     
     def infection_attempt(self, pair: tuple, size_dependent_inf_prob=True):
         a1, a2 = self.world.agents[pair[0]], self.world.agents[pair[1]] 
@@ -216,7 +220,7 @@ class SIS_model(object):
                 else:    
                     p_I = self.world.global_inf * self.world.infect_prob_dist[inf_duration_days]
                 
-                if p_I > np.random.random():
+                if p_I > self.rng.random(1)[0]: ### rework
                     log.debug(f'p_I: {p_I}')
                     agents[0].state = 1  ## infected without preliminary, however p_I is 0 anyways for 1-2 days
                     agents[0].times['infection'] = self.t
@@ -239,19 +243,21 @@ class SIS_model(object):
                     P_I = approximate_PI(p_I, p_c)
                 else:
                     P_I = p_I * p_c
-                
-                if P_I > np.random.random():
+                rand = self.rng.random(1)[0]
+                if P_I > rand:#np.random.random():
                     #log.debug(f'P_I: {P_I}')
                     agents[0].state = 1  ## infected without preliminary, however p_I is 0 anyways for 1-2 days
                     agents[0].times['infection'] = self.t
+                    #if agents[0].ID in [10,20,30,40]: #delme
+                    #    print(f'sim {self.ID} infection of {agents[0].ID} at {self.t} with  PI: {P_I} >{rand}') ## delme
 
     def get_pI(self, infector_inf_duration_days, infector_agent_size):
         p_I = (self.world.global_inf * 
                self.world.infect_prob_dist_per_size[infector_agent_size][infector_inf_duration_days])
         return p_I
     
-    def determine_contact_pairs(self,contact_list: list,seed=None)->list:
-        rng = default_rng(seed=seed)
+    def determine_contact_pairs(self,contact_list: list)->list:
+        rng = default_rng(seed=self.ID)
         contact_pairs =[(x[0],x[1]) for x in contact_list if x[2]>rng.random(1)]
         log.debug(f'{len(contact_pairs)} contact pairs out of {len(contact_list)}')
         return contact_pairs
@@ -261,7 +267,8 @@ class SIS_model(object):
     
     def write_infection_times_per_indiviual(self):
         self.world.ai_df = self.world.ai_df.groupby('cluster',group_keys=False).apply(assign_inf_timing, inf_timings=self.mean_inf_time).reset_index(drop=True)
-        self.world.ai_df['infection_time'] = self.world.ai_df['cluster_infection_time']+self.world.ai_df['Infection_timing_in_cluster']   
+        self.world.ai_df['infection_time'] = self.world.ai_df['cluster_infection_time']+self.world.ai_df['Infection_timing_in_cluster'] 
+        ## todo infection time is not written if none is infected - change?  
 
     def write_cluster_times_to_ai_df(self, times_dict):
         'add colums for transition times per cluster to ai_df'

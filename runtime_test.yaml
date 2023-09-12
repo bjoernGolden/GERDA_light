@@ -1,0 +1,19 @@
+name : 'small_24_3P'
+n : 3
+dT : 24
+n_ini_infected: 5
+timespan_day: 48 
+world:
+  p_l_t_filepath : 'src/Gangelt_03_new_p_l_t.gz' # 'src/Gangelt_01_new_p_l_t.gz'
+  ai_df_filename : 'src/Gangelt_03_new_ai_df.gz' # 'src/Gangelt_01_new_ai_df.gz'
+  clustering : False
+  k_I : 0.2
+  only_P1 : False
+sim:
+  t : 1
+  determine_inf_times_for_cluster : False
+run:
+  only_inf_rel_contacts : True
+  size_dependent_inf_prob : True
+  only_infection : True # if dT > 1 this must be True
+ 
