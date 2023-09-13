@@ -19,7 +19,8 @@ logger = log.getLogger()
 logger.setLevel(log.INFO)
 logger.disabled = True
 
-plt.style.use('seaborn-v0_8')
+#plt.rcParams.update(plt.rcParamsDefault)
+plt.style.use('seaborn-v0_8-muted')
 
 
 def read_config_yml(config_file):
@@ -40,9 +41,9 @@ def read_config_yml(config_file):
 ##without world generetion
 def run_sim(k, opt, dT, timespan_day, world):
     #### generate simulation# ###
-    t_reset0 = time.time()
+    t_ini0 = time.time()
     model = gl.SIS_model(world, sim_id=int(k))
-    t_reset1 = time.time()
+    t_ini1 = time.time()
     ## initialize infection
     for i in np.arange(1,opt['n_ini_infected']+1):
         model.world.agents[i].state = 1 ## infect one agent
@@ -57,13 +58,16 @@ def run_sim(k, opt, dT, timespan_day, world):
     inf_day_k =(k, list(ai_df['infection_day'].values))    
     times_k = (k,{'reset' : t_reset1 - t_reset0,  'run' : t_run1 - t_run0})
     return inf_day_k, times_k
+
 ### with world generation
 def run_sim_2(k, opt, dT, timespan_day):
+    t_w0= time.time()
     world = gl.World(dT=dT, **opt['world'] )
+    t_w1= time.time()
         
-    t_reset0 = time.time()
+    t_ini0 = time.time()
     model = gl.SIS_model(world, sim_id=int(k))
-    t_reset1 = time.time()
+    t_ini1 = time.time()
 
     ## initialize infection
     for i in np.arange(1,opt['n_ini_infected']+1):
@@ -77,8 +81,9 @@ def run_sim_2(k, opt, dT, timespan_day):
     ai_df =  model.world.ai_df
     ai_df['infection_day'] = ai_df[~ai_df['infection_time'].isna()]['infection_time'].map(lambda x: int(x*dT/24))
     inf_day_k =(k, ai_df['infection_day'].values)    
-    times_k = (k,{'reset' : t_reset1 - t_reset0,  'run' : t_run1 - t_run0})
+    times_k = (k,{'world' : t_w1 - t_w0,'ini' : t_ini1 - t_ini0,  'run' : t_run1 - t_run0})
     del(model)
+    del(world)
     return inf_day_k, times_k
 
 if __name__ == '__main__':
@@ -95,21 +100,21 @@ if __name__ == '__main__':
     dT = opt['dT']
     timespan_day = opt['timespan_day']
     name = opt['name']
-
+    extended_name = name + f'_n_{n}_dT_{dT}_dur_{timespan_day}'
     inf_day_dict = {}
     times_dict = {}
 
 
     ##### load world ######
-    world = gl.World(dT=dT, **opt['world'] )
+    #world = gl.World(dT=dT, **opt['world'] )
         
     #### run simulation #####
-    pre_sim = partial(run_sim, opt=opt, dT=dT, timespan_day=timespan_day, world=world)
-    #pre_sim2 = partial(run_sim_2, opt=opt, dT=dT, timespan_day=timespan_day)
+    #pre_sim = partial(run_sim, opt=opt, dT=dT, timespan_day=timespan_day, world=world)
+    pre_sim2 = partial(run_sim_2, opt=opt, dT=dT, timespan_day=timespan_day)
     print('starting parallel simulations')
     #out_list = []
     with Pool(processes=n) as pool:
-        out_list = pool.map(pre_sim,range(n))
+        out_list = pool.map(pre_sim2,range(n))
     #for k in range(2):
         #out_list.append(pre_sim(k))
     
@@ -133,7 +138,7 @@ if __name__ == '__main__':
 
     ##### store output ### 
     fig.savefig('plots/runtime_test.png', bbox_inches='tight')
-    out_df.to_csv(f'inf_times_day_{name}')
-    out_runtimes_df.to_csv(f'runtimes_{name}')
+    out_df.to_csv(f'inf_times_day_{extended_name}.csv')
+    out_runtimes_df.to_csv(f'runtimes_{extended_name}.csv')
 
 
