@@ -1,0 +1,168 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.animation as animation
+
+
+p = np.array([0.1,0.1,0.2,0.1,0.2,0.1,0.1,0.1,0.0,0,0.4,0.4,.0,0.3,0.2,0.4,0.5,0.3,0.2,0.2,0.4,0.0,0.1,0.1,0.1])
+p0 = np.array([0] + list(p))
+k_Is = np.linspace(0,1,40)
+
+######
+def get_P1(p:list)-> float:
+    return sum(p)
+
+def get_P2(p:list)-> float: 
+    ## assumed that p is arranged from early to later time points
+    P2 = 0.0
+    for l,pt in enumerate(p):
+        P2 += pt * sum(p[:l]) ## numpy?
+        #log.debug((P2,pt,l,p[:l]))
+    return P2
+
+
+def get_P3(p) -> float:
+    P3 = 0.0
+    for t, pt in enumerate(p):
+        for l, pl in enumerate(p[:t]):
+                P3 += pt * pl * sum(p[:l])  
+    return P3        
+
+def get_P4(p) -> float:
+    P4 = 0.0
+    for t, pt in enumerate(p):
+        for l, pl in enumerate(p[:t]):
+            for k, pk in enumerate(p[:l]):
+                P4 += pt * pl * pk * sum(p[:k])  
+    return P4     
+
+def get_P5(p) -> float:
+    P5 = 0.0
+    for t, pt in enumerate(p):
+        for l, pl in enumerate(p[:t]):
+            for k, pk in enumerate(p[:l]):
+                for n, pn in enumerate(p[:k]):
+                    P5 += pt * pl * pk * pn *sum(p[:n])  
+    return P5     
+
+get_Pn_dict = {
+    1 : get_P1,
+    2 : get_P2,
+    3 : get_P3,
+    4 : get_P4,
+    5 : get_P5,
+}
+
+def approx_n_PI(p,k_I,n):
+    PI = 0.0
+    for i in range(1,n+1):
+        PI += (-1)**(i+1) * (k_I**i) * get_Pn_dict[i](p)
+    return PI
+
+def approx_5_PI(p,k_I):
+    P1 = get_P1(p)
+    P2 = get_P2(p)
+    P3 = get_P3(p)
+    P4 = get_P4(p)
+    P5 = get_P5(p)
+    return k_I * P1 - (k_I ** 2) * P2 + (k_I ** 3) * P3  - (k_I ** 4) * P4 + (k_I ** 5) * P5
+
+
+def approx_4_PI(p,k_I):
+    P1 = get_P1(p)
+    P2 = get_P2(p)
+    P3 = get_P3(p)
+    P4 = get_P4(p)
+    return k_I * P1 - (k_I ** 2) * P2 + (k_I ** 3) * P3  - (k_I ** 4) * P4
+
+
+def approx_3_PI(p,p0,k_I):
+    P1 = get_P1(p)
+    P2 = get_P2(p)
+    P3 = get_P3(p)
+    return k_I * P1 - (k_I ** 2) * P2 + (k_I ** 3) * P3  
+
+def approx_2_PI(p,p0,k_I):
+    P1 = get_P1(p)
+    P2 = get_P2(p)
+    return k_I*P1-(k_I**2)*P2
+
+def approx_1_PI(p,p0,k_I):
+    P1 = get_P1(p)
+    return k_I * P1
+
+
+def true_PI(p,p0,K_I):    
+    return 1-(1-k_I*p).prod()
+
+def contact_P(p):    
+    return 1-(1-p).prod()
+
+for i in range(1,5):
+
+    print(i)
+    p=p/i
+    results=[]
+    for k_I in k_Is:
+        results.append((
+            true_PI(p,p0,k_I),
+            approx_n_PI(p,k_I,1),
+            approx_n_PI(p,k_I,2),
+            approx_n_PI(p,k_I,3),
+            approx_n_PI(p,k_I,4),
+            approx_n_PI(p,k_I,5),
+            k_I * contact_P(p)))
+
+
+    ######
+
+
+    fig, ax = plt.subplots(figsize=(7,6))
+    #fig = plt.figure(figsize=(5,4))
+    #ax = fig.add_axes((0.2,0.2,0.6,0.6))
+    time_text = ax.text(0.1, 0.9, '', transform=ax.transAxes)
+
+    x = np.arange(0, 2*np.pi, 0.01)
+    #line, = ax.plot(x, np.sin(x))
+    #line, = ax.plot(x,np.sin(x), label=r'true $P^{I}$')
+    col= ax.fill_between([0,1],np.array([0,0]),np.array([1,1]))
+    ax.plot([-0.1]+list(k_Is),[1]*(len(k_Is)+1),'--k')
+    line1, = ax.plot(k_Is, [x[0]for x in results], '-')
+    line, = ax.plot([], [])
+    ax.set_ylim(0,1.2)
+    ax.set_xlim(0,1.0)
+    ax.set_xlabel(r'$k_I$')
+    ax.set_ylabel(r'$P^I$')
+    
+
+    def animate(i):
+        global col
+        #line.set_ydata(np.sin(x+i))  # update the data.
+        #print(i)
+        col.remove()
+        if i == 0:
+            line.set_ydata([])  # update the data.
+            line.set_xdata([])  # update the data.
+            col= ax.fill_between([0,1],[0,0],[1,1],alpha=0)
+        else:
+            line.set_ydata([x[i]for x in results])  # update the data.
+            line.set_xdata(k_Is)  # update the data.
+            time_text.set_text(f'deg(f)=${{{i}}}$')
+            r =  np.array([x[i]for x in results])
+            if i%2==0:
+                col = ax.fill_between(k_Is, [x[0]for x in results], np.where(r>0,r,0), alpha=0.2)
+                print(r,  np.where(r<0,r,0))
+            else:
+                col = ax.fill_between(k_Is, np.where(r<1,r,1), [x[0]for x in results], alpha=0.2, color='gray')
+        #return line
+
+
+    ani = animation.FuncAnimation(
+        fig, animate,frames= [0,1,2,3,4,5], interval=1200, blit=False, save_count=5, repeat=False)
+
+    #Writer = animation.writers['ffmpeg']
+    #writer = Writer(fps=20, metadata=dict(artist='Me'), bitrate=1800)
+
+    ani.save(
+        f'movie/approximation_p{i}.mp4', writer='ffmpeg')
+
+plt.show()
