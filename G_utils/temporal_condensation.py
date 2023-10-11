@@ -84,7 +84,7 @@ def generate_condensed_inf_p_dict(contacts, schedule_time_span,dT):
                         new_time_dict[T] =[(i,j,(P1,P2,P3))]
     return new_time_dict  
 
-def approximate_PI(p_I:float, p_c: tuple):
+def approximate_PI(p_I:float, p_c: tuple): ## for general function see below
     if len(p_c)==3:
         P1 = p_c[0]
         P2 = p_c[1]
@@ -92,6 +92,11 @@ def approximate_PI(p_I:float, p_c: tuple):
         return p_I * P1 - (p_I ** 2) * P2 + (p_I ** 3) * P3
     else:
         raise TypeError('need 3 probabilites')
+    
+def approximate_PI_n(p_I:float, p_c: tuple): ### general approximation function but slower / not used yet
+    PI = 0
+    for k,P in enumerate(p_c):
+        PI += (-P)*(-p_I)**(k+1)  
 
 
 
