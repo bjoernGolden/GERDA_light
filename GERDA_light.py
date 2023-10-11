@@ -160,8 +160,11 @@ class SIS_model(object):
             self.mean_inf_time = [0]# self.world.infection_times_cluster_list     
     
     def reset(self):
+        size_dict = self.world.infect_prob_dist_per_size  
         self.world = copy.deepcopy(self.w0)
+        self.world.infect_prob_dist_per_size = size_dict 
         self.t = 1
+        del size_dict
         # self.__init__(self.w0,t=1)
         
     def run(self,timespan=96, 
@@ -225,7 +228,7 @@ class SIS_model(object):
                     agents[0].state = 1  ## infected without preliminary, however p_I is 0 anyways for 1-2 days
                     agents[0].times['infection'] = self.t
     
-    def infection_attempt_c(self, triple: tuple, size_dependent_inf_prob=True):
+    def infection_attempt_c(self, triple: tuple, size_dependent_inf_prob=True): 
         
         a1, a2, p_c = self.world.agents[triple[0]], self.world.agents[triple[1]], triple[2] 
 
@@ -239,7 +242,7 @@ class SIS_model(object):
                 
                 p_I = self.get_pI(inf_duration_days, agents[1].size)
                 
-                if type(p_c) == tuple:
+                if type(p_c) == tuple: 
                     P_I = approximate_PI(p_I, p_c)
                 else:
                     P_I = p_I * p_c
@@ -320,7 +323,7 @@ def get_infection_prob_dist_dict(infection_times_cluster_list: list=[0,2,2,2,2,3
 
 ### create plt and ai_df  for n_agents in one location to create infection times
 def create_homogenous_world(n_agents=10, k_I=0.2):
-    h_w  = World(clustering=False,k_I=k_I)
+    h_w  = World(clustering=False,k_I=k_I,only_P1=True)
     df = h_w.ai_df#.drop(h_w.ai_df[h_w.ai_df['h_ID']>10])
     h_w.ai_df = df[df['h_ID']<n_agents+1]
     h_w.p_l_t = np.ones(shape=(n_agents+1,168)).astype(int) ## first line is no agent ->0 
@@ -339,15 +342,14 @@ def average_lists(t_lists: list)->list:
     t_array = np.full((len(t_lists), max_len), np.nan)
     for i, lst in enumerate(t_lists):
         t_array[i, :len(lst)] = lst
-
     mean_inf_times = np.nanmean(t_array, axis=0).astype(int)
     return mean_inf_times
 
 
-def run_single_simulation_for_inf_times(w,_, t=600):
-        model_t = SIS_model(w, determine_inf_times_for_cluster=False)
-        model_t.run(timespan=t,only_inf_rel_contacts=True)
-        times = [int(a.times['infection']/24) for a in model_t.world.agents.values() if a.times['infection'] is not None]
+def run_single_simulation_for_inf_times(w,sim_id, t=600):
+        model_t = SIS_model(w, determine_inf_times_for_cluster=False, sim_id=sim_id)
+        model_t.run(timespan=t,only_inf_rel_contacts=True, size_dependent_inf_prob=False)
+        times = [int(a.times['infection']/24) if a.times['infection'] is not None else np.nan for a in model_t.world.agents.values()]
         times.sort()
         log.info('run test for mean infection times')
         del model_t
@@ -355,16 +357,13 @@ def run_single_simulation_for_inf_times(w,_, t=600):
 
 def get_average_infection_times_mp(n_agents=12, n_samples=12, t= 600, k_I=0.2, n_cores=4):
     ## multi processing # seems to not converge 
-    t_lists = [0] * int(n_agents)
+    t_lists = list(np.arange(max(n_samples,n_agents)))
     log.debug('iter: ',len(t_lists))
     h_w = create_homogenous_world(n_agents=n_agents, k_I=k_I)
     
     f = partial(run_single_simulation_for_inf_times,h_w,t=t)
     with Pool(n_cores) as p:
           l = p.map(f, t_lists)
-    # l = []
-    # for i in range(n_cores):
-    #     l.append(f(0))
     return  average_lists(l)
 
 def create_transition_times_dict(agents: dict) -> dict:
@@ -387,7 +386,7 @@ if __name__=="__main__":
     ## model generation and simulation
     w1 = World(clustering=False)
     model = SIS_model(w1)
-    model.world.agents[1].state=1 # infect one agent
+    model.world.agents[1].state = 1 # infect one agent
     model.world.agents[1].times['infection'] = 0 
     model.run(timespan=1500, only_inf_rel_contacts=True)
 
