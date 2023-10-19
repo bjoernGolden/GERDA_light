@@ -149,7 +149,7 @@ if __name__ == '__main__':
     sim_time = opt['simulation_time']# timespan_day = opt['timespan_day']
     T1 = opt['pre_lockdown_time']
     T2 = opt['lockdown_time']
-    name = opt['name']
+    name = 'lockdown_'+opt['name']
     extended_name = name + f'_n_{n}_dT_{dT}_dur_{sim_time}_T1_{T1}_T2_{T2}'
     inf_day_dict = {}
     times_dict = {}

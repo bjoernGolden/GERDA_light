@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 import joblib as jb
 import logging as log
 from itertools import permutations, combinations
@@ -21,7 +22,7 @@ class P_ijT(object):
 
 ### Extracting the list of contacts l(list of tuples) for each timestep in one dictionary 
 ### missing - NPIs - how to excluded or replace locations 
-def contact_lists_from_p_l_t(p_l_t: np.array, agent_interactivity_dict = None,  max_t = None, directed = True)->dict:
+def contact_lists_from_p_l_t(p_l_t: npt.NDArray, agent_interactivity_dict = None,  max_t = None, directed = True)->dict:
         """from the table (array) p_l_t  to the dictionary of lists of contacts 
         
         Args:
@@ -74,6 +75,31 @@ def contact_lists_from_p_l_t(p_l_t: np.array, agent_interactivity_dict = None,  
         log.info('contact list is done')               
         return contacts      
 
+def get_lockdown_plt(old_plt : npt.NDArray, agents=None):
+    """generates a lockdown plt from the input plt of the same size
+        first column is used as lockdown location, usually the home location.
+        
+        If specified in the kwarg 'agents' the location are only changed
+        for the agents with the IDs stated in the list.
+        Otherwise the the lockdown is planned for all agents
+
+    Args:
+        old_plt (_type_): initial schedule as cols agent_IDs, rows: time (h), value: location ID
+        agents (list, optional): list of agent IDs for lockdown
+
+    Returns:
+        np.array : array of shape of old_plt _description_
+    """
+    new_plt = old_plt.copy()
+    timesteps = new_plt.shape[1] ## time 
+    
+    if agents:
+        home_locs = old_plt[agents][:,0]
+    else:
+        home_locs = old_plt[:,0]
+    
+    new_plt[agents] = np.array([home_locs]*timesteps).T
+    return new_plt
 
 ### go through dict and fill array or dict with += log(1-p_ij) 
 
@@ -81,16 +107,17 @@ def P_ijT_from_P_ijt_k(P_ijt_k: dict, n_agents: int):
 
     P_ijT = np.ones((n_agents-1,n_agents-1))
     
-    for t,contacts in P_ijt_k.items():
+    for t, contacts in P_ijt_k.items():
         for a1,a2,p in contacts:
             P_ijT[a1-1,a2-1] *= (1-p)
+    
     log.info(f'Projection of P_ijt to PijT for {t} time steps is done')
           
     P_ijT = np.ones((n_agents-1,n_agents-1))-P_ijT
 
     return P_ijT 
 
-def test_for_singularity_of_P(P: np.array)->tuple:
+def test_for_singularity_of_P(P: npt.NDArray)->tuple:
     """takes quadratic P matrix and returns singular P matrix and list of indeces with all zero entries in P
 
     Args:

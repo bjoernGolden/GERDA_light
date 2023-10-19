@@ -19,7 +19,7 @@ except:
      pass
 
 logger = log.getLogger()
-logger.setLevel(log.DEBUG)
+logger.setLevel(log.INFO)
 
 plt.style.use('dark_background')
 
@@ -137,7 +137,7 @@ def get_hID_cID_dict(SC)->dict:
     return SC.ai_df['cluster'].to_dict()
 
 class SIS_model(object):
-    def __init__(self,world,sim_id=1, t=1, determine_inf_times_for_cluster=False):
+    def __init__(self,world,sim_id=None, t=1, determine_inf_times_for_cluster=False):
         self.rng = default_rng(seed=sim_id)
         self.ID = sim_id
         self.world = copy.deepcopy(world)
