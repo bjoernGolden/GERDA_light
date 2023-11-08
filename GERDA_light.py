@@ -43,21 +43,27 @@ class World(object):
                        k_I: float = 0.2 ,
                        infection_times_cluster_list=[0,1,2,2,3,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,7,7,7,7,8], ## list[0] must be 0
                        **cluster_kwargs :dict):
+        #assert only_P1==True
+        self.dT = dT
         self.infection_times_cluster_list = infection_times_cluster_list
         self.infect_prob_dist = create_lognorm_probability_dist(s=1,a=4, days=30) ## in days
         self.infect_prob_dist_per_size = get_infection_prob_dist_dict(s=1,a=4,
-                                                                      infection_times_cluster_list=infection_times_cluster_list)
+                                                                      infection_times_cluster_list=infection_times_cluster_list,
+                                                                      transform=True, # per dT
+                                                                      dT=dT,
+                                                                      )
+        
         self.global_inf = k_I
         self.clustering = clustering
-        self.dT = dT
         self.only_P1 = only_P1 ### only for testing 
 
         if clustering:
             
             log.debug('world with clusters of agents')
-            self.SC = spec_clustering(**cluster_kwargs,
+            self.SC = spec_clustering(
                                       plt_filename = p_l_t_filepath,
                                       ai_df_filename = ai_df_filename,
+                                      **cluster_kwargs,
                                       )
 
             self.p_l_t = self.SC.p_l_t
@@ -92,7 +98,7 @@ class World(object):
            self.contacts = generate_condensed_inf_p_dict(self.contacts, self.schedule_time_span, self.dT)
 
          
-    def generate_agents(self, column = 'h_ID')->dict:
+    def generate_agents(self, column = 'h_ID'):
         if column== 'cluster':
             self.agents = {ID: Agent(ID, 0, size = self.ai_df['cluster_size'][self.ai_df[column]==ID].values[0]) for ID in self.ai_df[column].unique()}
         else:
@@ -114,7 +120,7 @@ class World(object):
 def determine_contact_pairs(cluster_contacts,t=1,seed=None, weekly_contacts=True)->list:
     rng = default_rng(seed=seed)
     if weekly_contacts:
-        t1 = t%168
+        t1 = t%168 #### with dT????
     else:
         t1=t    
     contact_cluster_pairs =[(x[0],x[1]) for x in cluster_contacts[t1] if x[2]>rng.random(1)]#ps[i]]
@@ -137,7 +143,7 @@ def get_hID_cID_dict(SC)->dict:
     return SC.ai_df['cluster'].to_dict()
 
 class SIS_model(object):
-    def __init__(self,world,sim_id=None, t=1, determine_inf_times_for_cluster=False):
+    def __init__(self,world,sim_id=None, t=1, determine_inf_times_for_cluster=False, clusters=False):
         self.rng = default_rng(seed=sim_id)
         self.ID = sim_id
         self.world = copy.deepcopy(world)
@@ -152,13 +158,21 @@ class SIS_model(object):
             self.mean_inf_time = get_average_infection_times_mp(
                 n_agents=int(self.world.max_cluster_size), n_samples=15, 
                 t=600, k_I=self.world.global_inf , n_cores=4) ## t has to be dependent on the n_agents
-            
+            log.debug(f'{self.mean_inf_time=}' )
             self.world.infect_prob_dist_per_size = get_infection_prob_dist_dict(
                 s=1,a=4,
-                infection_times_cluster_list=self.mean_inf_time)
+                infection_times_cluster_list=self.mean_inf_time,
+                transform=True)
+            
+        elif clusters:
+            self.mean_inf_time = [0,2,2,2,2,3,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,7]+[10]*int(self.world.max_cluster_size)# self.world.infection_times_cluster_list
+            self.world.infect_prob_dist_per_size = get_infection_prob_dist_dict(
+                s=1,a=4,
+                infection_times_cluster_list=self.mean_inf_time,
+                transform=True) 
         else:
-            self.mean_inf_time = [0]# self.world.infection_times_cluster_list     
-    
+            self.mean_inf_time = [0]
+
     def reset(self):
         size_dict = self.world.infect_prob_dist_per_size  
         self.world = copy.deepcopy(self.w0)
@@ -207,7 +221,6 @@ class SIS_model(object):
         self.write_infection_times_per_indiviual()        
         
     
-    
     def infection_attempt(self, pair: tuple, size_dependent_inf_prob=True):
         a1, a2 = self.world.agents[pair[0]], self.world.agents[pair[1]] 
         states = (a1.state, a2.state)
@@ -215,14 +228,15 @@ class SIS_model(object):
         if set(states)== {0,1}:
             agents = [[a1,a2][x] for x in states] ## sorting that agent[0] has state 0 and vice versa 
             ## infection probability
-            inf_duration_days = int((self.t-agents[1].times['infection'])/24)
-            if inf_duration_days < 21: ## replace 21 with length of distribution
-                
-                if size_dependent_inf_prob:
-                    p_I = self.world.global_inf * self.world.infect_prob_dist_per_size[agents[1].size][inf_duration_days]
-                else:    
-                    p_I = self.world.global_inf * self.world.infect_prob_dist[inf_duration_days]
-                
+            inf_duration = int((self.t-agents[1].times['infection']))
+            if inf_duration < len(self.world.infect_prob_dist_per_size[1]): 
+
+                # if size_dependent_inf_prob:
+                #     p_I = self.world.global_inf * self.world.infect_prob_dist_per_size[agents[1].size][inf_duration]
+                # else:    
+                #     p_I = self.world.global_inf * self.world.infect_prob_dist[inf_duration]
+                p_I = self.get_pI(inf_duration, agents[1].size)
+
                 if p_I > self.rng.random(1)[0]: ### rework
                     log.debug(f'p_I: {p_I}')
                     agents[0].state = 1  ## infected without preliminary, however p_I is 0 anyways for 1-2 days
@@ -234,30 +248,41 @@ class SIS_model(object):
 
         states = (a1.state, a2.state)
         
-        if set(states)== {0,1}:
+        if set(states) == {0,1}:
             agents = [[a1,a2][x] for x in states] ## sorting that agent[0] has state 0 and vice versa 
             ## infection probability
-            inf_duration_days = int((self.t-agents[1].times['infection'])*self.world.dT/24)
-            if inf_duration_days < 21: ## replace 21 with length of distribution
+            inf_duration = int((self.t-agents[1].times['infection']))
+            #inf_duration_days = int((self.t-agents[1].times['infection'])*self.world.dT/24)
+            if inf_duration < len(self.world.infect_prob_dist_per_size[1]): 
                 
-                p_I = self.get_pI(inf_duration_days, agents[1].size)
+                p_I = self.get_pI(inf_duration, agents[1].size)
                 
                 if type(p_c) == tuple: 
                     P_I = approximate_PI(p_I, p_c)
                 else:
                     P_I = p_I * p_c
-                rand = self.rng.random(1)[0]
-                if P_I > rand:#np.random.random():
-                    #log.debug(f'P_I: {P_I}')
+
+                if P_I > self.rng.random(1)[0]:
                     agents[0].state = 1  ## infected without preliminary, however p_I is 0 anyways for 1-2 days
                     agents[0].times['infection'] = self.t
-                    #if agents[0].ID in [10,20,30,40]: #delme
-                    #    print(f'sim {self.ID} infection of {agents[0].ID} at {self.t} with  PI: {P_I} >{rand}') ## delme
 
-    def get_pI(self, infector_inf_duration_days, infector_agent_size):
+
+    def get_pI(self, infector_inf_duration: int, infector_agent_size: int = 1)->float:
+        """calculate infection probability
+
+        Args:
+            infector_inf_duration_days (int): infection duration in days
+            infector_agent_size (int): default 1, clustersize if agent represents a cluster, 
+
+        Returns:
+            pI: infection probability
+        """
         p_I = (self.world.global_inf * 
-               self.world.infect_prob_dist_per_size[infector_agent_size][infector_inf_duration_days])
-        return p_I
+               self.world.infect_prob_dist_per_size[infector_agent_size][infector_inf_duration])
+        if p_I<=1:
+            return p_I
+        else:
+            return 1
     
     def determine_contact_pairs(self,contact_list: list)->list:
         rng = default_rng(seed=self.ID)
@@ -293,7 +318,8 @@ def create_lognorm_probability_dist(s=1, ## sigma of lognorm
 def get_infection_prob_dist_dict(infection_times_cluster_list: list=[0,2,2,2,2,3,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,7],
                                  s=1, ## sigma of lognorm
                                  a=4, ## mean of lognorm
-                                 )-> dict:
+                                 dT=1,
+                                 transform=True)-> dict:
     """creates average infection probability distribution for different cluster sizes based on given infection times.
 
     Args:
@@ -316,9 +342,35 @@ def get_infection_prob_dist_dict(infection_times_cluster_list: list=[0,2,2,2,2,3
     
     for i in range(1,max_cluster_size + 1):
         ps = [np.array(int(infection_times_cluster_list[k])*[0.0]+list(p[:-(int(infection_times_cluster_list[k]))])) for k in range(1,i)]
-        prob_per_size_dict[i] = sum([p] + ps)/i
+        
+        if transform:
+            prob_size_day= sum([p] + ps)/i
+            prob_per_size_dict[i] = transform_inf_dur_day_to_dT(prob_size_day,dT=dT)
+        else:
+            prob_per_size_dict[i] = sum([p] + ps)/i
     return prob_per_size_dict 
 
+def transform_inf_dur_day_to_dT(inf_duration_day_array,dT):
+    """change infection duration array to infection per dT,
+        calculate the mean of the infection probability over dT
+       if dT is no divisor of the length of the input array it is cropped 
+
+    Args:
+        inf_duration_day_array (np.array): infectivity depending on duration
+        dT (int): time step size
+
+    Returns:
+        np.array: _description_
+    """
+    ## create array per hour
+    max_days = len(inf_duration_day_array)
+    ifh1 = np.array([inf_duration_day_array[int(x/24)] for x in range(max_days*24)])
+    ## lamb values for dT
+    max_h = len(ifh1)
+    max_h_for_dT = int(max_h/dT)*dT
+    if_split = np.array(np.split(ifh1[:max_h_for_dT],max_h_for_dT/dT))
+    new_arr = if_split.mean(axis=1)
+    return new_arr
 ##### get the timing of mean infection times inside the clusters
 
 ### create plt and ai_df  for n_agents in one location to create infection times
@@ -349,7 +401,7 @@ def average_lists(t_lists: list)->list:
 def run_single_simulation_for_inf_times(w,sim_id, t=600):
         model_t = SIS_model(w, determine_inf_times_for_cluster=False, sim_id=sim_id)
         model_t.run(timespan=t,only_inf_rel_contacts=True, size_dependent_inf_prob=False)
-        times = [int(a.times['infection']/24) if a.times['infection'] is not None else np.nan for a in model_t.world.agents.values()]
+        times = [int(a.times['infection']) if a.times['infection'] is not None else np.nan for a in model_t.world.agents.values()]
         times.sort()
         log.info('run test for mean infection times')
         del model_t
