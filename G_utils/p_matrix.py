@@ -111,7 +111,7 @@ def P_ijT_from_P_ijt_k(P_ijt_k: dict, n_agents: int):
         for a1,a2,p in contacts:
             P_ijT[a1-1,a2-1] *= (1-p)
     
-    log.info(f'Projection of P_ijt to PijT for {t} time steps is done')
+    #log.info(f'Projection of P_ijt to PijT for {t} time steps is done')
           
     P_ijT = np.ones((n_agents-1,n_agents-1))-P_ijT
 
