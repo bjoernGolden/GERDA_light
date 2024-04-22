@@ -129,7 +129,7 @@ if __name__ == '__main__':
     #### plot ####
     fig, ax = plt.subplots(1,1, figsize=(6,6), sharey=True)
     for sim_id in out_df.columns:
-        out_df.hist([sim_id],alpha=0.3, ax = ax, bins=np.arange(0,timespan_day,4))
+        out_df.hist([sim_id],alpha=0.3, ax = ax, bins=np.arange(0,timespan_day,4),grid=False)
     
     ax.set_title(f'{name}')
     ax.set_ylabel('infection events')
