@@ -196,11 +196,11 @@ class SIS_model(object):
         
     def run(self,timespan=96, 
             only_inf_rel_contacts: bool = True,
-            size_dependent_inf_prob: bool = True,
-            only_infection: bool = False):
+            #size_dependent_inf_prob: bool = True,
+            only_infection: bool = False,):
         
-        if size_dependent_inf_prob:
-            log.debug(f'using cluster size dependent  infection probability:')
+        #if size_dependent_inf_prob:
+        #    log.debug(f'using cluster size dependent  infection probability:')
         
         t_start = self.t
         
@@ -386,7 +386,7 @@ def transform_inf_dur_day_to_dT(inf_duration_day_array,dT):
         dT (int): time step size
 
     Returns:
-        np.array: _description_
+        np.array: duration dependent infectivity (per dT)  
     """
     ## create array per hour
     max_days = len(inf_duration_day_array)
@@ -416,29 +416,39 @@ def create_homogenous_world(n_agents=10, k_I=0.2):
 
 def average_lists(t_lists: list)->list: 
     ## required since the lists have not the same length
-    max_len = max([len(lst) for lst in t_lists])
-    t_array = np.full((len(t_lists), max_len), np.nan)
-    for i, lst in enumerate(t_lists):
-        t_array[i, :len(lst)] = lst
-    mean_inf_times = np.nanmean(t_array, axis=0).astype(int)
-    return mean_inf_times
+    #max_len = max([len(lst) for lst in t_lists])
+    #t_array = np.full((len(t_lists), max_len), np.nan)
+    #for i, lst in enumerate(t_lists):
+    #    t_array[i, :len(lst)] = lst
+    #mean_inf_times = np.nanmean(t_array, axis=0).astype(int)
+    #mean_inf_times.sort()
+    arr_inf_times = np.array(t_lists)
+    print(arr_inf_times)
+    arr_mean = np.round(np.nanmean(arr_inf_times,axis=0))
+    arr_mean_inf_times = arr_mean[~np.isnan(arr_mean)].astype(int)
+    arr_inf_times.sort()
+    if len(arr_inf_times[0])>len(arr_inf_times): 
+        log.info(f'could not calculate the mean for {len(arr_inf_times[0])-len(arr_inf_times)}.')
+    return arr_mean_inf_times
 
 
 def run_single_simulation_for_inf_times(w,sim_id, t=600):
         model_t = SIS_model(w, determine_inf_times_for_cluster=False, sim_id=sim_id)
-        model_t.run(timespan=t,only_inf_rel_contacts=True, size_dependent_inf_prob=False)
-        times = [int(a.times['infection']) if a.times['infection'] is not None else np.nan for a in model_t.world.agents.values()]
-        times.sort()
-        log.info('run test for mean infection times')
+        log.info(f'run pre simulation {sim_id=}')
+        model_t.run(timespan=t,only_inf_rel_contacts=True, only_infection=True)
+        times = np.array([int(a.times['infection']) if a.times['infection'] is not None else np.nan for a in model_t.world.agents.values()])
+        times.sort() ## required, without sorting no averaging 
         del model_t
         return(times)
 
-def get_average_infection_times_mp(n_agents=12, n_samples=12, t= 600, k_I=0.2, n_cores=4):
-    ## multi processing # seems to not converge 
-    t_lists = list(np.arange(max(n_samples,n_agents)))
-    log.debug('iter: ',len(t_lists))
+def get_average_infection_times_mp(n_agents=12, n_samples=200, t=600, k_I=0.2, n_cores=4):
+    ## multi processing # seems not to converge 
+    ## if the sample size is to small averaging is impossible (n_sample>200)
+    #t_lists = list(np.arange(max(n_samples,n_agents)))
+    t_lists = list(np.arange(n_samples))
+    log.info(f'creat homogeneous world with {n_agents=}')
     h_w = create_homogenous_world(n_agents=n_agents, k_I=k_I)
-    
+    log.info(f'run test for mean infection times with {n_samples=}')
     f = partial(run_single_simulation_for_inf_times,h_w,t=t)
     with Pool(n_cores) as p:
           l = p.map(f, t_lists)
