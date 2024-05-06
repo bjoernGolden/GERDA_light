@@ -359,7 +359,7 @@ def get_infection_prob_dist_dict(infection_times_cluster_list=[0,2,2,2,2,3,3,3,3
         if missing_entries >0:
             if missing_entry is None:
                 missing_entry = max(infection_times_cluster_list) 
-            log.info(f'missing values for infection times ar approximated by {missing_entry}')
+            log.info(f'{missing_entries} missing values for infection times ar approximated by {missing_entry}')
             infection_times_cluster_list += [missing_entry]* missing_entries
 
         for i in range(1,max_cluster_size + 1):

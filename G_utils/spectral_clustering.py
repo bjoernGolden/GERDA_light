@@ -58,7 +58,7 @@ class spec_clustering(object):
         
         ## Laplacian and eigenvalues _ vectors
         self.L = get_Laplacian(self.P_red, L_type = self.L_type)
-        self.vals, self.vecs = get_sorted_eigenvalues_vectors(self.L)
+        self.vals, self.vecs = get_sorted_eigenvalues_vectors(self.L) # type: ignore
 
         ## determine the optimal k value from eigenvalues, depends on threshold 1 
         s_k = self.suggested_k()
@@ -70,7 +70,7 @@ class spec_clustering(object):
             log.info(f'suggested k is {s_k},Attentation! using  k= {n_clusters} instead')
 
         ## First K Eigenvectors 
-        self.eigenvecs_df = get_first_k_eigenvecs(self.vals, self.vecs, k=self.k)
+        self.eigenvecs_df = get_first_k_eigenvecs(self.vals, self.vecs, k=self.k) # type: ignore
         log.info('eigenvalues done')
         self.cluster = run_k_means(self.eigenvecs_df, n_clusters=self.n_clusters)
         log.info('kmeans_done')
