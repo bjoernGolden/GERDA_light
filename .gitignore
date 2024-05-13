@@ -1,9 +1,31 @@
-# files
+## files
 *.png
+*.gif
+*.mp4
+GERDA_light.code-workspace
+.DS_Store
+*.csv
+/output_server/**
 
-#folder
+## output folder, leave the structure
 /plots/*
 /movie/*
-/output_server/*
+output/*
+## complete folder
 .ipynb_checkpoints
 .vscode
+__pycache__
+
+
+## plotting resources
+!output_server/hd
+!/output_server/hd/runtimes_big_24_3P.csv
+!/output_server/hd/runtimes_small_24_3P.csv
+!/output_server/hd/inf_times_day_small_24_3P.csv
+!/output_server/hd/inf_times_day_big_24_3P.csv
+!/output_server/runtimes_big_new_n_48_dT_24_dur_96.csv
+!/output_server/runtimes_big_new_n_48_dT_1_dur_96.csv
+!/output_server/runtimes_big_old_n_48_dT_1_dur_96.csv
+!/output_server/inf_times_day_big_new_n_48_dT_24_dur_96.csv
+!/output_server/inf_times_day_big_new_n_48_dT_1_dur_96.csv
+!/output_server/inf_times_day_big_old_n_48_dT_1_dur_96.csv
