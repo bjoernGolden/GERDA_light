@@ -1,0 +1,9 @@
+# files
+*.png
+
+#folder
+/plots/*
+/movie/*
+/output_server/*
+.ipynb_checkpoints
+.vscode
