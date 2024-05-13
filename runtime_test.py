@@ -24,7 +24,6 @@ plt.style.use('seaborn-v0_8-muted')
 
 
 def read_config_yml(config_file):
-    
     '''
     load configuration file from 'analysis_config'.yaml**
     expected type: yaml
@@ -38,6 +37,7 @@ def read_config_yml(config_file):
     except:
         raise ImportError
     return config_dict
+
 ##without world generetion
 def run_sim(k, opt, dT, timespan_day, world):
     #### generate simulation# ###
@@ -56,7 +56,7 @@ def run_sim(k, opt, dT, timespan_day, world):
     ai_df =  model.world.ai_df
     ai_df['infection_day'] = ai_df[~ai_df['infection_time'].isna()]['infection_time'].map(lambda x: int(x*dT/24))
     inf_day_k =(k, list(ai_df['infection_day'].values))    
-    times_k = (k,{'reset' : t_reset1 - t_reset0,  'run' : t_run1 - t_run0})
+    times_k = (k,{'ini' : t_ini1 - t_ini0,  'run' : t_run1 - t_run0})
     return inf_day_k, times_k
 
 ### with world generation
@@ -138,7 +138,7 @@ if __name__ == '__main__':
 
     ##### store output ### 
     fig.savefig('plots/runtime_test.png', bbox_inches='tight')
-    out_df.to_csv(f'inf_times_day_{extended_name}.csv')
-    out_runtimes_df.to_csv(f'runtimes_{extended_name}.csv')
+    out_df.to_csv(f'ouput/inf_times_day_{extended_name}.csv')
+    out_runtimes_df.to_csv(f'output/runtimes_{extended_name}.csv')
 
 
