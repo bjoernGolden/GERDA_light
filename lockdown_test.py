@@ -143,6 +143,13 @@ if __name__ == '__main__':
         config_file_name =  'lockdown_test.yaml'
         log.info(f'no config filename was given. Using {config_file_name} instead')
     opt = read_config_yml(config_file_name)
+    try:
+      T2=int(sys.argv[2])
+      opt['lockdown_time']=T2
+    except:
+      T2=opt['lockdown_time']
+    print(f'{T2=}')
+    #opt = read_config_yml(config_file_name)
     n = opt['n']
     dT = opt['dT']
     sim_time = opt['simulation_time']# timespan_day = opt['timespan_day']
