@@ -27,7 +27,7 @@ class spec_clustering(object):
                        certainty = 0.999, ## lower probabilities interaction probabilities are set to zero
                        L_type = 'L', ## either L, L_sym or L_rw
                        #k = 250,
-                       n_clusters = 250, 
+                       n_clusters: int = 250, 
                        inertia_plot=False,
                        plot_eigen_values=False,
                        use_suggested_k=False,
@@ -58,7 +58,7 @@ class spec_clustering(object):
         
         ## Laplacian and eigenvalues _ vectors
         self.L = get_Laplacian(self.P_red, L_type = self.L_type)
-        self.vals, self.vecs = get_sorted_eigenvalues_vectors(self.L)
+        self.vals, self.vecs = get_sorted_eigenvalues_vectors(self.L) # type: ignore
 
         ## determine the optimal k value from eigenvalues, depends on threshold 1 
         s_k = self.suggested_k()
@@ -67,10 +67,10 @@ class spec_clustering(object):
             self.k = s_k
             self.n_clusters = s_k
         else:    
-            log.info(f'suggested k:{s_k}, but using  {n_clusters} instead')
+            log.info(f'suggested k is {s_k},Attentation! using  k= {n_clusters} instead')
 
         ## First K Eigenvectors 
-        self.eigenvecs_df = get_first_k_eigenvecs(self.vals, self.vecs, k=self.k)
+        self.eigenvecs_df = get_first_k_eigenvecs(self.vals, self.vecs, k=self.k) # type: ignore
         log.info('eigenvalues done')
         self.cluster = run_k_means(self.eigenvecs_df, n_clusters=self.n_clusters)
         log.info('kmeans_done')
@@ -98,7 +98,7 @@ class spec_clustering(object):
         ## check for non interactors and remove them from P
         self.P_red, self.zero_contacts, self.non_zero_contacts = test_for_singularity_of_P(self.P) 
 
-    def get_Laplacians(self)-> np.array:
+    def get_Laplacians(self):
         self.L = get_Laplacian(self.P_red, L_type = self.L_type)
         return self.L
 
@@ -153,15 +153,17 @@ class spec_clustering(object):
 
       
 
-def get_Laplacian(P: np.array, L_type ='L')-> np.array:
+def get_Laplacian(P: np.ndarray, L_type ='L'):
     """Laplacian"""
     assert L_type in ['L','L_sym','L_rw'], 'L_type muss be either  "L", "L_sym", or "L_rw" '
     ##degree matrix of P
+    
     D = np.diag(P.sum(axis=0))
-
+    L = D - P     ## unnormalized Laplacian
+    
     if L_type == 'L': 
-        L = D - P     ## unnormalized Laplacian
-        return L 
+        return L  ## unnormalized Laplacian
+        
     elif L_type == 'L_sym':     ## normalized symmetric laplacian
         D12 =  np.diag(np.sqrt(1 / np.diag(np.linalg.inv(D)))) ##  $\mathcal{L_{sym}} = D^{-1/2} \mathcal{L} D^{-1/2}$
         L_sym =  D12.dot(L.dot(D12))
@@ -170,14 +172,14 @@ def get_Laplacian(P: np.array, L_type ='L')-> np.array:
         L_rw = np.identity(P.shape[0]) - np.linalg.inv(D).dot(P)    ##  $ \mathcal{L_{rw}} = D^{-1}L = I-D^{-1}P$ I-D^-1 P 
         return L_rw         
 
-def get_sorted_eigenvalues_vectors(L: np.array):
+def get_sorted_eigenvalues_vectors(L: np.ndarray):
     """Eigenvalues & Vectors"""
     eigenvals, eigenvecs =  np.linalg.eig(L)
     vals, vecs = np.real(eigenvals), np.real(eigenvecs)
     ind = np.argsort(vals) ## sort by ascending eigenvalues
     return  vals[ind], vecs[:,ind] #np.real(eigenvals), np.real(eigenvecs) ## only real parts 
 
-def get_first_k_eigenvecs(vals: np.array ,vecs: np.array,k=250)-> pd.DataFrame:
+def get_first_k_eigenvecs(vals: np.ndarray ,vecs: np.ndarray, k:int=250)-> pd.DataFrame:
     """First Eigenvectors in Dataframe """
     df = pd.DataFrame(vecs[:,:k]) ## df from eigenvec corresponding to the lowest k eigenvalues
     df.columns = ['v_' + str(c) for c in df.columns]

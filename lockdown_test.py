@@ -40,27 +40,6 @@ def read_config_yml(config_file):
     return config_dict
 ##without world generetion
 
-### not used here
-def run_sim(k, opt, dT, timespan_day, world):
-    #### generate simulation# ###
-    t_ini0 = time.time()
-    model = gl.SIS_model(world, sim_id=int(k))
-    t_ini1 = time.time()
-    ## initialize infection
-    for i in np.arange(1,opt['n_ini_infected']+1):
-        model.world.agents[i].state = 1 ## infect one agent
-        model.world.agents[i].times['infection'] = 0    
-
-    t_run0 = time.time()
-    model.run(timespan=int(timespan_day*24/dT),**opt['run']) 
-    t_run1 = time.time()
-       
-    ai_df =  model.world.ai_df
-    ai_df['infection_day'] = ai_df[~ai_df['infection_time'].isna()]['infection_time'].map(lambda x: int(x*dT/24))
-    inf_day_k =(k, list(ai_df['infection_day'].values))    
-    times_k = (k,{'reset' : t_reset1 - t_reset0,  'run' : t_run1 - t_run0})
-    return inf_day_k, times_k
-
 def run_sim_lockdown(k:int, opt: dict):
     """function to simulate a lockdown to use in multiprocessing
 
@@ -80,7 +59,7 @@ def run_sim_lockdown(k:int, opt: dict):
     T1, T2 = int(opt['pre_lockdown_time']/dT), int(opt['lockdown_time']/dT) 
     T3 = int((opt['simulation_time']- T1 -T2)/dT) 
     
-    
+    print(T1, T2 , T3)
     #### generate simulation# ###
     t_ini0 = time.time()
     model = gl.SIS_model(world, sim_id=int(k))
@@ -106,33 +85,6 @@ def run_sim_lockdown(k:int, opt: dict):
     inf_day_k =(k, list(ai_df['infection_day'].values))   
     AR_k = (k, np.sum([~pd.isna(ai_df.infection_day)])/world.n_agents)
     return inf_day_k, AR_k
-
-### with world generation### not used here
-def run_sim_2(k, opt, dT, timespan_day):
-    t_w0= time.time()
-    world = gl.World(dT=dT, **opt['world'] )
-    t_w1= time.time()
-        
-    t_ini0 = time.time()
-    model = gl.SIS_model(world, sim_id=int(k))
-    t_ini1 = time.time()
-
-    ## initialize infection
-    for i in np.arange(1,opt['n_ini_infected']+1):
-        model.world.agents[i].state = 1 ## infect one agent
-        model.world.agents[i].times['infection'] = 0    
-
-    t_run0 = time.time()
-    model.run(timespan=int(timespan_day*24/dT),**opt['run']) 
-    t_run1 = time.time()
-       
-    ai_df =  model.world.ai_df
-    ai_df['infection_day'] = ai_df[~ai_df['infection_time'].isna()]['infection_time'].map(lambda x: int(x*dT/24))
-    inf_day_k =(k, ai_df['infection_day'].values)    
-    times_k = (k,{'world' : t_w1 - t_w0,'ini' : t_ini1 - t_ini0,  'run' : t_run1 - t_run0})
-    del(model)
-    del(world)
-    return inf_day_k, times_k
 
 if __name__ == '__main__':
     print(sys.argv[1], sys.argv[2])
@@ -202,15 +154,15 @@ if __name__ == '__main__':
     
     axes[0].set_ylabel('infection events')
     axes[0].set_xlabel('time, days')
-    axes[0].set_xlim(0,100)
-    axes[0].set_ylim(-5,180)
+    axes[0].set_xlim(0,int(opt['simulation_time']/24))
+    #axes[0].set_ylim(-5,180)
     axes[0].set_title(f'{name}')
 
 
     df1 = out_AR_df.T.reset_index(drop=True)
     sns.swarmplot(data=df1, ax=axes[1])
     axes[1].set_ylabel('attack rate')
-
+    axes[1].set_ylim(-0.1,1.1)
     plt.tight_layout()
     plt.show()
 
