@@ -1,10 +1,10 @@
-name : 'big_test'
-n : 3
-dT : 24
+name : 'big'
+n : 48
+dT : 1
 ini_infected: [3,4,5,6] ## agent IDs of initial infected agents
-pre_lockdown_time: 240 ## in h 
-lockdown_time: 336 ## in h
-simulation_time: 2520 ## in h
+pre_lockdown_time: 504 ## in h 
+lockdown_time: 504 ## in h
+simulation_time: 3600 ## in h
 world:
   p_l_t_filepath : 'src/Gangelt_01_new_p_l_t.gz' # 'src/Gangelt_01_new_p_l_t.gz'
   ai_df_filename : 'src/Gangelt_01_new_ai_df.gz' # 'src/Gangelt_01_new_ai_df.gz'

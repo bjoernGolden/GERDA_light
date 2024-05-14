@@ -135,20 +135,19 @@ def run_sim_2(k, opt, dT, timespan_day):
     return inf_day_k, times_k
 
 if __name__ == '__main__':
-
+    print(sys.argv[1], sys.argv[2])
     #### read config file ####
     try:
         config_file_name=sys.argv[1]
     except:
         config_file_name =  'lockdown_test.yaml'
         log.info(f'no config filename was given. Using {config_file_name} instead')
-
     opt = read_config_yml(config_file_name)
     n = opt['n']
     dT = opt['dT']
     sim_time = opt['simulation_time']# timespan_day = opt['timespan_day']
     T1 = opt['pre_lockdown_time']
-    T2 = opt['lockdown_time']
+    #T2 = opt['lockdown_time']
     name = 'lockdown_'+opt['name']
     extended_name = name + f'_n_{n}_dT_{dT}_dur_{sim_time}_T1_{T1}_T2_{T2}'
     inf_day_dict = {}
@@ -209,8 +208,8 @@ if __name__ == '__main__':
     plt.show()
 
     ##### store output ### 
-    fig.savefig('plots/lockdown_test.png', bbox_inches='tight')
-    out_df.to_csv(f'output_server/hd/inf_times_day_{extended_name}.csv')
-    out_AR_df.to_csv(f'output_server/hd/AR_{extended_name}.csv')
+    fig.savefig(f'plots/lockdown_test_{extended_name}.png', bbox_inches='tight')
+    out_df.to_csv(f'output_server_2/inf_times_day_{extended_name}.csv')
+    out_AR_df.to_csv(f'output_server_2/AR_{extended_name}.csv')
 
 
