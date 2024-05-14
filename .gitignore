@@ -3,9 +3,13 @@
 *.gif
 *.mp4
 GERDA_light.code-workspace
+array_script.sh
+lockdown_test_T*
 .DS_Store
 *.csv
 /output_server/**
+/output_server_2/**
+/slurm
 
 ## output folder, leave the structure
 /plots/*
