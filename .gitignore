@@ -15,11 +15,11 @@ lockdown_test_T*
 /plots/*
 /movie/*
 output/*
+
 ## complete folder
 .ipynb_checkpoints
 .vscode
 __pycache__
-
 
 ## plotting resources
 !output_server/hd
