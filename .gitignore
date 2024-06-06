@@ -12,7 +12,7 @@ lockdown_test_T*
 /slurm
 
 ## output folder, leave the structure
-/plots/*
+#/plots/*
 /movie/*
 output/*
 
